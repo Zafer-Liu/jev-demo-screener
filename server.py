@@ -1,9 +1,11 @@
 """Jev 简历初筛 Web MVP（Flask）· JD 版.
 
-- GET  /           -> web/index.html
-- POST /api/screen -> {"jd": "<职位描述>", "text": "<简历>"} -> 一次 Jev 调用，8 项评估
+- GET  /            -> web/index.html
+- POST /api/screen  -> {"jd": "<职位描述>", "text": "<简历>"} -> 一次 Jev 调用，8 项评估
+- GET  /api/history -> 最近 10 条初筛记录（内存，新→旧）
 
 判定全部以 JD 为参照：匹配度、技能实证（关键词吹牛检测）、推荐结论均对照当前岗位。
+置信度门控：recommend_conf < 0.6 时 gate="low-confidence: human review advised"，否则 "auto"。
 
 用法:
     python server.py
@@ -26,6 +28,11 @@ KEY = [l.split("=", 1)[1].strip()
 app = Flask(__name__)
 client = TypeSafeClient(api_key=KEY)   # 全局共享：TLS 连接复用
 lock = threading.Lock()                # 串行化共享 client 的调用
+
+MAX_INPUT_CHARS = 50_000               # JD + 简历合计字符上限（保护 64k token 上下文）
+HISTORY_MAX = 10
+HISTORY = []                           # 最近初筛记录，新→旧
+history_lock = threading.Lock()        # 保护 HISTORY
 
 QUESTIONS = {
     "years": {"type": "score",
@@ -71,6 +78,12 @@ def _warmup():
                           questions={"ok": {"type": "noul", "instructions": "The state contains text"}})
 
 
+def _jd_title(jd: str) -> str:
+    """JD 标题（首个非空行），否则退回前 30 字符；最长 30 字符。"""
+    first = next((ln.strip() for ln in jd.splitlines() if ln.strip()), "")
+    return (first or jd)[:30]
+
+
 threading.Thread(target=_warmup, daemon=True).start()  # 启动即预热（首次 TLS ~6s，之后 ~400ms）
 
 
@@ -88,6 +101,10 @@ def screen():
         return jsonify(error="empty job description"), 400
     if not text:
         return jsonify(error="empty resume text"), 400
+    total = len(jd) + len(text)
+    if total > MAX_INPUT_CHARS:
+        return jsonify(error=f"input too long: jd + resume is {total} chars, "
+                             f"max is {MAX_INPUT_CHARS} (protects the model's 64k context)"), 400
     state = f"JOB DESCRIPTION:\n{jd}\n\n=====\n\nRESUME:\n{text}"
     t0 = time.perf_counter()
     try:
@@ -96,6 +113,18 @@ def screen():
     except Exception as e:
         return jsonify(error=f"jev call failed: {e}"), 502
     a = r.answers
+    wall_ms = round((time.perf_counter() - t0) * 1000)
+    input_tokens = r.usage.input_tokens or 0
+    cost_usd = round(input_tokens / 1e6 * 0.042, 6)   # $0.042 / 1M input tokens
+    gate = ("low-confidence: human review advised"
+            if a["recommend"].confidence < 0.6 else "auto")
+    with history_lock:
+        HISTORY.insert(0, {"ts": time.strftime("%Y-%m-%d %H:%M:%S"),
+                           "jd": _jd_title(jd),
+                           "recommend": a["recommend"].choice,
+                           "jd_match": a["jd_match"].score,
+                           "wall_ms": wall_ms})
+        del HISTORY[HISTORY_MAX:]
     return jsonify(
         years=a["years"].score,
         depth=a["depth"].score,
@@ -107,8 +136,18 @@ def screen():
         progression_conf=a["progression"].confidence,
         recommend=a["recommend"].choice,
         recommend_conf=a["recommend"].confidence,
-        wall_ms=round((time.perf_counter() - t0) * 1000),
+        wall_ms=wall_ms,
+        input_tokens=input_tokens,
+        cost_usd=cost_usd,
+        gate=gate,
     )
+
+
+@app.get("/api/history")
+def history():
+    """最近 10 条初筛记录，新→旧（仅内存，重启即清空）。"""
+    with history_lock:
+        return jsonify(list(HISTORY))
 
 
 if __name__ == "__main__":

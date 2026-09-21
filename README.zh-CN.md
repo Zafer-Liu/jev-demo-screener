@@ -48,7 +48,7 @@
 需要 Python 3.10+。
 
 ```bash
-pip install flask typesafe-sdk requests
+pip install -r requirements.txt   # 或：pip install flask typesafe-sdk requests
 
 # 配置 API Key（在 console.typesafe.ai 获取）
 cp .env.example .env     # 然后编辑 .env
@@ -61,6 +61,24 @@ python server.py
 # CLI 旧版 —— 无 JD 锚定的原始版本（7 问），留作对照
 python screener.py
 ```
+
+## HTTP API
+
+**`POST /api/screen`** —— 请求体 `{"jd": "<职位描述>", "text": "<简历>"}`。一次 Jev 调用返回全部 8 项答案，外加运行元数据：
+
+| 字段 | 含义 |
+|---|---|
+| `years`、`depth`、`jd_match` | Score 评分答案 |
+| `skill_evidence`、`mentorship`、`opensource` | Noul 概率（0-1） |
+| `progression`、`progression_conf`、`recommend`、`recommend_conf` | Choice 答案 + 置信度 |
+| `wall_ms` | 本次初筛调用整体耗时（毫秒） |
+| `input_tokens` | API 上报的输入 token 数（`r.usage.input_tokens`；未上报时为 0） |
+| `cost_usd` | 预估输入成本，`input_tokens / 1e6 * $0.042`，保留 6 位小数 |
+| `gate` | `recommend_conf < 0.6` 时为 `"low-confidence: human review advised"`（置信度门控的转人工理由），否则 `"auto"` |
+
+错误以 JSON 返回：JD/简历为空或两者合计超过 **50,000 字符** 返回 `400`（上限用于保护模型 64k token 上下文）；Jev 调用失败返回 `502`，包成 `{"error": "jev call failed: ..."}`。
+
+**`GET /api/history`** —— 最近 10 条初筛记录，新→旧，仅存内存（重启即清空）。每条含：`ts`（本地时间戳）、`jd`（JD 标题即首行，否则前 30 字符）、`recommend`、`jd_match`、`wall_ms`。Web 初筛台在结果面板下方把它渲染成「最近初筛」条带。
 
 ## Jev 问题设计
 
@@ -90,11 +108,13 @@ CLI 旧版（`screener.py`）是无 JD 锚定的基线：7 问，用通用的 `l
 
 ```
 jev-demo-screener/
-├── screener.py     # CLI 旧版：无 JD 锚定基线，7 问（留作对照）
-├── server.py       # Flask Web MVP：POST /api/screen，JD 锚定，一次调用 8 问
+├── screener.py       # CLI 旧版：无 JD 锚定基线，7 问（留作对照）
+├── server.py         # Flask Web MVP：POST /api/screen、GET /api/history，JD 锚定，一次调用 8 问
 ├── web/
-│   └── index.html  # 初筛台界面，内置 JD / 简历预设（单文件，无构建步骤）
-└── .env            # TYPESAFE_API_KEY=...（切勿提交）
+│   └── index.html    # 初筛台界面，内置 JD / 简历预设（单文件，无构建步骤）
+├── requirements.txt  # flask>=3.0、typesafe-sdk、requests
+├── LICENSE           # MIT
+└── .env              # TYPESAFE_API_KEY=...（切勿提交）
 ```
 
 ## 注意事项

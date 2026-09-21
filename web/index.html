@@ -80,6 +80,14 @@
   .stamp.hr{border-color:var(--amber);background:rgba(251,191,36,.08)}
   .stamp.hr .r{color:var(--amber)}
   .empty{color:var(--dim);font-size:13px;text-align:center;padding:80px 0;line-height:2.2}
+  /* 最近初筛 */
+  .hlist{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+  .hitem{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:8px;
+    padding:6px 10px;font-size:12px;background:rgba(255,255,255,.015)}
+  .hitem .hid{color:var(--cyan);font-family:Consolas,monospace;min-width:26px}
+  .hitem .hjd{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .hitem .hts,.hitem .hms{color:var(--dim);font-family:Consolas,monospace;white-space:nowrap}
+  .hempty{color:#5b6776;font-size:12px;padding:4px 0}
   footer{margin-top:14px;font-size:12px;color:#5b6776}
 </style>
 </head>
@@ -133,6 +141,8 @@
   <section class="panel">
     <h3>🧠 Jev 结构化初筛结果</h3>
     <div id="result"><div class="empty">尚无结果<br>载入 JD + 简历样本后点「开始初筛」</div></div>
+    <h3 style="margin-top:14px">🕘 最近初筛（服务端内存 · 最近 10 条）</h3>
+    <div id="history" class="hlist"><div class="hempty">暂无记录</div></div>
   </section>
 </div>
 
@@ -174,9 +184,24 @@ const ta = document.getElementById("resume");
 const btnRun = document.getElementById("btn-run");
 const stateEl = document.getElementById("state");
 const resultEl = document.getElementById("result");
+const historyEl = document.getElementById("history");
 
 function pct(p){return Math.round(p*100)+"%"}
 function pctColor(p){return p>=.66?"#34d399":p>=.33?"#fbbf24":"#f87171"}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+
+async function loadHistory(){
+  try{
+    const h = await fetch("/api/history").then(x=>x.json());
+    historyEl.innerHTML = (Array.isArray(h)&&h.length)
+      ? h.map((e,i)=>`<div class="hitem"><span class="hid">#${i+1}</span>`+
+          `<span class="hjd" title="${esc(e.jd)}">${esc(e.jd)}</span>`+
+          `<span class="hts">${esc(e.ts)}</span>`+
+          `<span class="hms">${e.wall_ms} ms</span></div>`).join("")
+      : `<div class="hempty">暂无记录</div>`;
+  }catch(e){/* 历史条带失败不影响主流程 */}
+}
+loadHistory();
 
 document.getElementById("btn-jd1").onclick = ()=>{
   jdTa.value = JD1;
@@ -246,7 +271,8 @@ async function run(){
       body:JSON.stringify({jd,text})}).then(x=>x.json());
     if(r.error){ stateEl.textContent = "✗ " + r.error; return; }
     render(r);
-    stateEl.innerHTML = `✅ 完成 · 模型耗时 <b>${r.wall_ms} ms</b>`;
+    stateEl.innerHTML = `✅ 完成 · 模型耗时 <b>${r.wall_ms} ms</b> · 输入 <b>${r.input_tokens}</b> tokens · 成本 <b>$${(+r.cost_usd||0).toFixed(6)}</b>`;
+    loadHistory();
   }catch(e){
     stateEl.textContent = "✗ 请求失败：" + e.message;
   }finally{

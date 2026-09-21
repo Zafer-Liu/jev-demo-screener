@@ -48,7 +48,7 @@ The third row is the showcase. Against JD-2 (senior frontend), the same Resume A
 Requires Python 3.10+.
 
 ```bash
-pip install flask typesafe-sdk requests
+pip install -r requirements.txt   # or: pip install flask typesafe-sdk requests
 
 # Configure your API key (get one at console.typesafe.ai)
 cp .env.example .env     # then edit .env
@@ -61,6 +61,24 @@ python server.py
 # Legacy CLI — the original no-JD version (7 questions), kept for comparison
 python screener.py
 ```
+
+## HTTP API
+
+**`POST /api/screen`** — body `{"jd": "<job description>", "text": "<resume>"}`. One Jev call, all eight answers, plus run metadata:
+
+| Field | Meaning |
+|---|---|
+| `years`, `depth`, `jd_match` | Score answers |
+| `skill_evidence`, `mentorship`, `opensource` | Noul probabilities (0–1) |
+| `progression`, `progression_conf`, `recommend`, `recommend_conf` | Choice answers + confidences |
+| `wall_ms` | Wall-clock time of the whole screening call |
+| `input_tokens` | Input tokens reported by the API (`r.usage.input_tokens`; 0 if unreported) |
+| `cost_usd` | Estimated input cost, `input_tokens / 1e6 * $0.042`, 6 decimal places |
+| `gate` | `"low-confidence: human review advised"` when `recommend_conf < 0.6` (the confidence-gating rationale), else `"auto"` |
+
+Errors come back as JSON: `400` for an empty JD/resume or a combined input over **50,000 characters** (a cap that protects the model's 64k-token context), `502` wrapped as `{"error": "jev call failed: ..."}` if the Jev call itself fails.
+
+**`GET /api/history`** — the most recent 10 screenings, newest first, in-memory only (cleared on restart). Each entry: `ts` (local timestamp), `jd` (JD title — first line — or first 30 chars), `recommend`, `jd_match`, `wall_ms`. The web console renders this as the "最近初筛" strip under the result panel.
 
 ## The Jev questions
 
@@ -90,11 +108,13 @@ The legacy CLI (`screener.py`) is the no-JD baseline: 7 questions that swap `jd_
 
 ```
 jev-demo-screener/
-├── screener.py     # legacy CLI: no-JD baseline, 7 questions (kept for comparison)
-├── server.py       # Flask web MVP: POST /api/screen, JD-anchored, 8 questions per call
+├── screener.py       # legacy CLI: no-JD baseline, 7 questions (kept for comparison)
+├── server.py         # Flask web MVP: POST /api/screen, GET /api/history, JD-anchored, 8 questions per call
 ├── web/
-│   └── index.html  # screening console with JD/resume presets (single file, no build step)
-└── .env            # TYPESAFE_API_KEY=... (never commit)
+│   └── index.html    # screening console with JD/resume presets (single file, no build step)
+├── requirements.txt  # flask>=3.0, typesafe-sdk, requests
+├── LICENSE           # MIT
+└── .env              # TYPESAFE_API_KEY=... (never commit)
 ```
 
 ## Notes

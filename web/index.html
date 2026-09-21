@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Jev 简历初筛台 · MVP · 置信度门控</title>
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#121821; --line:#1f2937; --txt:#e5edf5; --dim:#8b98a9;
+    --cyan:#22d3ee; --green:#34d399; --amber:#fbbf24; --red:#f87171; --violet:#a78bfa;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;font-family:"Segoe UI","Microsoft YaHei",sans-serif}
+  body{background:var(--bg);color:var(--txt);min-height:100vh;padding:22px 28px}
+  header{display:flex;align-items:baseline;gap:14px;margin-bottom:16px;flex-wrap:wrap}
+  header h1{font-size:22px;font-weight:700}
+  header h1 b{color:var(--cyan)}
+  header .sub{color:var(--dim);font-size:13px}
+  /* 流程条 */
+  .pipeline{display:flex;align-items:stretch;gap:10px;background:var(--panel);border:1px solid var(--line);
+    border-radius:14px;padding:14px 18px;margin-bottom:14px;flex-wrap:wrap}
+  .stage{flex:1;min-width:150px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;text-align:center}
+  .stage .t{font-size:14px;font-weight:600;margin-bottom:6px}
+  .stage .d{font-size:12px;color:var(--dim);line-height:1.5}
+  .arrow{align-self:center;color:var(--dim);font-size:20px}
+  .stage.q{border-color:#164e63}
+  .stage.q .chips{display:flex;gap:6px;justify-content:center;margin-top:8px;flex-wrap:wrap}
+  .stage.q .chips span{font-size:11px;padding:2px 8px;border-radius:99px;border:1px solid var(--cyan);color:var(--cyan)}
+  .stage.route{border-color:#5b21b6}
+  .stage.split{display:flex;flex-direction:column;gap:6px}
+  .stage.split .half{border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:12px}
+  .stage.split .half b{font-size:13px}
+  .stage.split .half.ok{border-color:#14532d}
+  .stage.split .half.ok b{color:var(--green)}
+  .stage.split .half.human{border-color:#78350f}
+  .stage.split .half.human b{color:var(--amber)}
+  /* 控制条 */
+  .ctrl{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+  button{background:var(--cyan);color:#06222b;border:0;border-radius:8px;padding:9px 22px;font-size:14px;
+    font-weight:700;cursor:pointer}
+  button.ghost{background:transparent;border:1px solid var(--line);color:var(--txt)}
+  button.ghost:hover{border-color:var(--cyan);color:var(--cyan)}
+  button:disabled{opacity:.45;cursor:default}
+  .state{font-size:13px;color:var(--dim)}
+  .state b{color:var(--cyan)}
+  /* 主区 */
+  .wrap{display:grid;grid-template-columns:minmax(340px,5fr) 7fr;gap:14px;align-items:start}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+  .panel h3{font-size:13px;color:var(--dim);margin-bottom:10px;font-weight:600;letter-spacing:.5px}
+  textarea{width:100%;min-height:430px;background:#0d1420;border:1px solid var(--line);border-radius:10px;
+    color:var(--txt);font-size:13.5px;line-height:1.6;padding:12px 14px;resize:vertical;
+    font-family:Consolas,"Segoe UI",monospace}
+  textarea:focus{outline:none;border-color:var(--cyan)}
+  textarea::placeholder{color:#5b6776}
+  .hint{font-size:12px;color:#5b6776;margin-top:8px;line-height:1.6}
+  /* 结果行 */
+  .rows{display:flex;flex-direction:column;gap:12px}
+  .rrow{display:grid;grid-template-columns:128px 1fr 92px;gap:12px;align-items:center;
+    border:1px solid var(--line);border-radius:10px;padding:11px 14px;background:rgba(255,255,255,.015)}
+  .rrow .k{font-size:13px;color:var(--dim)}
+  .rrow .pb{height:8px;background:#1c2733;border-radius:99px;overflow:hidden}
+  .rrow .pb i{display:block;height:100%;border-radius:99px;width:0;transition:width .5s ease}
+  .rrow .v{font-size:16px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
+  .rrow .v small{font-size:11px;color:var(--dim);font-weight:400}
+  .rrow.hot{border-color:#4c1d95;background:rgba(167,139,250,.06)}
+  .rrow.hot .k{color:var(--violet)}
+  .tag{display:inline-block;font-size:10px;color:var(--violet);border:1px solid var(--violet);
+    border-radius:99px;padding:0 7px;margin-left:6px;vertical-align:1px;white-space:nowrap}
+  .chip{display:inline-block;font-size:13px;font-weight:700;border:1px solid;border-radius:99px;padding:3px 14px}
+  .chip small{font-weight:400;font-size:11px;opacity:.85;margin-left:6px}
+  /* 大图章 */
+  .stamp{margin-top:16px;border:2px solid;border-radius:14px;padding:18px 20px;text-align:center;
+    animation:pop .35s ease}
+  @keyframes pop{from{transform:translateY(-8px);opacity:0}to{transform:none;opacity:1}}
+  .stamp .r{font-size:26px;font-weight:800;letter-spacing:1px}
+  .stamp .c{font-size:12px;color:var(--dim);margin-top:6px}
+  .stamp .ms{font-size:11px;color:var(--dim);margin-top:5px;font-family:Consolas,monospace}
+  .stamp.ok{border-color:var(--green);background:rgba(52,211,153,.08)}
+  .stamp.ok .r{color:var(--green)}
+  .stamp.no{border-color:var(--red);background:rgba(248,113,113,.08)}
+  .stamp.no .r{color:var(--red)}
+  .stamp.hr{border-color:var(--amber);background:rgba(251,191,36,.08)}
+  .stamp.hr .r{color:var(--amber)}
+  .empty{color:var(--dim);font-size:13px;text-align:center;padding:80px 0;line-height:2.2}
+  footer{margin-top:14px;font-size:12px;color:#5b6776}
+</style>
+</head>
+<body>
+<header>
+  <h1>📋 <b>Jev</b> 简历初筛台 · MVP · 置信度门控</h1>
+  <span class="sub">TypeSafe System One 模型 · 真实 API 调用 · JD 锚定 · 一次评估 8 项</span>
+</header>
+
+<div class="pipeline">
+  <div class="stage">
+    <div class="t">📄 JD + 简历</div>
+    <div class="d">岗位要求 + 候选人材料<br>匹配与否以此为锚</div>
+  </div>
+  <div class="arrow">➜</div>
+  <div class="stage q">
+    <div class="t">🧠 Jev 一次八问（并行）</div>
+    <div class="chips"><span>Score 年限/深度/匹配</span><span>Noul×3 概率</span><span>Choice 轨迹/结论</span></div>
+  </div>
+  <div class="arrow">➜</div>
+  <div class="stage route">
+    <div class="t">⚖️ 置信度门控</div>
+    <div class="d">结论不确定时<br>自动转人工细看</div>
+  </div>
+  <div class="arrow">/</div>
+  <div class="stage split">
+    <div class="t">初筛出口</div>
+    <div class="half ok"><b>✅ 结论标记</b> · 排序加分</div>
+    <div class="half human"><b>👤 转人工</b> · 决策留人</div>
+  </div>
+</div>
+
+<div class="ctrl">
+  <button class="ghost" id="btn-jd1">🎯 JD-1 · AI产品工程师</button>
+  <button class="ghost" id="btn-jd2">🎯 JD-2 · 高级前端工程师</button>
+  <button class="ghost" id="btn-a">📥 简历A·实干型</button>
+  <button class="ghost" id="btn-b">📥 简历B·关键词型</button>
+  <button id="btn-run">▶ 开始初筛</button>
+  <span class="state" id="state">就绪 · 等待输入</span>
+</div>
+
+<div class="wrap">
+  <section class="panel">
+    <h3>🎯 职位描述 JD（判定锚点）</h3>
+    <textarea id="jd" spellcheck="false" style="min-height:150px" placeholder="粘贴职位描述，或点上方 JD 预设"></textarea>
+    <h3 style="margin-top:12px">📄 简历（可自由编辑）</h3>
+    <textarea id="resume" spellcheck="false" style="min-height:260px" placeholder="粘贴简历，或点上方按钮载入样本"></textarea>
+    <div class="hint">推荐组合实验：JD-1 + 简历A（应高度匹配）· JD-1 + 简历B（吹牛检测）· JD-2 + 简历A（跨岗错配）<br>
+      快捷键 Ctrl+Enter 开始初筛</div>
+  </section>
+  <section class="panel">
+    <h3>🧠 Jev 结构化初筛结果</h3>
+    <div id="result"><div class="empty">尚无结果<br>载入 JD + 简历样本后点「开始初筛」</div></div>
+  </section>
+</div>
+
+<footer>初筛仅排序标记，最终决策留人 · 数据来自真实 API 调用 · D:\PR-project\jev-demo-screener</footer>
+
+<script>
+const JD1 = `高级 AI 产品工程师
+- 5 年以上后端/平台研发经验
+- 主导过 LLM 应用落地（RAG / Agent / 评测），有真实上线案例
+- 熟悉 Python 服务化（FastAPI/Flask），有性能优化经验
+- 有带团队 / 导师经验者优先
+- 有开源项目维护者优先`;
+
+const JD2 = `高级前端工程师
+- 5 年以上前端开发经验（React / Vue）
+- 主导过复杂交互产品的前端架构
+- 熟悉构建工具链（Vite/Webpack）与性能监控
+- 有设计系统（Design System）经验优先`;
+
+const RESUME_A = `Chen Wei, Backend Engineer, 6 years.
+- Built and shipped an LLM-powered support triage service (Python, FastAPI, vLLM):
+  fine-tuned routing prompts, eval harness with 12k labeled tickets, cut handle time 31%.
+- Led a team of 4 for 2 years, ran weekly 1:1s, mentored 2 juniors to promotion.
+- Maintainer of an open-source rate-limiter library (2.3k stars); regular contributor to langchain.
+- Career: junior -> mid -> senior at same company, then staff engineer at current company.`;
+
+const RESUME_B = `Zhang San, "AI Expert", 8 years (self-assessed).
+- Familiar with: ChatGPT, LLM, AIGC, Prompt Engineering, LangChain, RAG, Agent,
+  Transformer, BERT, GPT-4, vector database, fine-tuning, deep learning, machine learning.
+- Participated in several projects involving AI (details available upon request).
+- Fast learner, passionate about cutting-edge technology, team player.
+- Job history: 6 companies in 8 years, titles include AI Engineer / Algorithm Expert / AI Product Director.`;
+
+const PROG = {steady_growth:["稳步成长","#34d399"], job_hopping:["频繁跳槽","#f87171"], lateral_moves:["横向平移","#fbbf24"]};
+const REC = {interview:["✅ 推荐面试","ok"], reject:["❌ 不推荐","no"], human_review:["👤 转人工细看","hr"]};
+
+const jdTa = document.getElementById("jd");
+const ta = document.getElementById("resume");
+const btnRun = document.getElementById("btn-run");
+const stateEl = document.getElementById("state");
+const resultEl = document.getElementById("result");
+
+function pct(p){return Math.round(p*100)+"%"}
+function pctColor(p){return p>=.66?"#34d399":p>=.33?"#fbbf24":"#f87171"}
+
+document.getElementById("btn-jd1").onclick = ()=>{
+  jdTa.value = JD1;
+  stateEl.textContent = "已载入 JD-1 · AI 产品工程师（简历A 的对口岗位）";
+};
+document.getElementById("btn-jd2").onclick = ()=>{
+  jdTa.value = JD2;
+  stateEl.textContent = "已载入 JD-2 · 高级前端工程师（与两份样本简历都错配）";
+};
+document.getElementById("btn-a").onclick = ()=>{
+  ta.value = RESUME_A;
+  stateEl.textContent = "已载入 简历A · 实干型（真做过 LLM 产品）";
+  ta.focus();
+};
+document.getElementById("btn-b").onclick = ()=>{
+  ta.value = RESUME_B;
+  stateEl.textContent = "已载入 简历B · 关键词型（热词堆砌无实绩）";
+  ta.focus();
+};
+[jdTa,ta].forEach(el=>el.addEventListener("keydown", e=>{ if((e.ctrlKey||e.metaKey)&&e.key==="Enter") run(); }));
+btnRun.onclick = run;
+
+function bar(col, w){
+  return `<div class="pb"><i data-w="${Math.max(0,Math.min(100,Math.round(w)))}" style="background:${col}"></i></div>`;
+}
+
+function render(r){
+  const years = +r.years||0, depth = +r.depth||0, match = +r.jd_match||0;
+  const men = +r.mentorship||0, skill = +r.skill_evidence||0, oss = +r.opensource||0;
+  const [pName,pCol] = PROG[r.progression]||[r.progression||"—","#8b98a9"];
+  const pConf = +r.progression_conf||0;
+  const [rTxt,rCls] = REC[r.recommend]||[r.recommend||"—","hr"];
+  const mCol = match>=2.5?"#34d399":match>=1.5?"#fbbf24":"#f87171";
+  resultEl.innerHTML = `<div class="rows">
+    <div class="rrow" style="border-color:${mCol}66"><span class="k" style="color:${mCol}">JD 匹配度</span>${bar(mCol,match/4*100)}
+      <span class="v" style="color:${mCol}">${match.toFixed(1)}<small>/4</small></span></div>
+    <div class="rrow"><span class="k">经历年限</span>${bar("#22d3ee",years/5*100)}
+      <span class="v">${years.toFixed(1)}<small>/5</small></span></div>
+    <div class="rrow"><span class="k">技术深度</span>${bar("#22d3ee",depth/5*100)}
+      <span class="v">${depth.toFixed(1)}<small>/5</small></span></div>
+    <div class="rrow hot"><span class="k">技能实证<span class="tag">关键词吹牛检测</span></span>
+      ${bar("#a78bfa",skill*100)}<span class="v" style="color:#a78bfa">${pct(skill)}</span></div>
+    <div class="rrow"><span class="k">带人经验</span>${bar(pctColor(men),men*100)}
+      <span class="v">${pct(men)}</span></div>
+    <div class="rrow"><span class="k">开源贡献</span>${bar(pctColor(oss),oss*100)}
+      <span class="v">${pct(oss)}</span></div>
+    <div class="rrow"><span class="k">职业轨迹</span>${bar(pCol,pConf*100)}
+      <span class="v"><span class="chip" style="color:${pCol};border-color:${pCol}">${pName}<small>置信 ${pct(pConf)}</small></span></span></div>
+  </div>
+  <div class="stamp ${rCls}">
+    <div class="r">${rTxt}</div>
+    <div class="c">置信度 ${pct(+r.recommend_conf||0)} · 置信度门控路由</div>
+    <div class="ms">${r.wall_ms} ms · 一次调用 · 8 项评估（对照 JD）</div>
+  </div>`;
+  setTimeout(()=>resultEl.querySelectorAll(".pb i").forEach(i=>i.style.width=i.dataset.w+"%"),30);
+}
+
+async function run(){
+  const jd = jdTa.value.trim();
+  const text = ta.value.trim();
+  if(!jd){ stateEl.textContent = "✗ 请先输入或载入 JD（职位描述）"; return; }
+  if(!text){ stateEl.textContent = "✗ 请先粘贴简历或点上方按钮载入样本"; return; }
+  btnRun.disabled = true;
+  stateEl.innerHTML = "🧠 Jev 评估中… <b>首次调用需预热数秒</b>";
+  try{
+    const r = await fetch("/api/screen",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({jd,text})}).then(x=>x.json());
+    if(r.error){ stateEl.textContent = "✗ " + r.error; return; }
+    render(r);
+    stateEl.innerHTML = `✅ 完成 · 模型耗时 <b>${r.wall_ms} ms</b>`;
+  }catch(e){
+    stateEl.textContent = "✗ 请求失败：" + e.message;
+  }finally{
+    btnRun.disabled = false;
+  }
+}
+</script>
+</body>
+</html>
